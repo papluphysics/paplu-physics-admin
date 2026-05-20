@@ -1,20 +1,5 @@
 {
   "version": 2,
-  "name": "paplu-physics-admin",
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
-    "ADMIN_EMAIL": "@admin_email",
-    "ADMIN_PASSWORD_HASH": "@admin_password_hash",
-    "ADMIN_SECRET_KEY": "@admin_secret_key"
-  },
   "headers": [
     {
       "source": "/(.*)",
