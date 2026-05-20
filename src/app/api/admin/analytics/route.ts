@@ -70,12 +70,12 @@ export async function GET(req: NextRequest) {
     const section = (p.papers as any)?.categories?.section || 'other'
     catCount.set(section, (catCount.get(section) || 0) + 1)
   }
-  const total = [...catCount.values()].reduce((a, b) => a + b, 0) || 1
+  const total = Array.from(catCount.values()).reduce((a, b) => a + b, 0) || 1
   const COLORS: Record<string, string> = {
     jee: '#7c3aed', neet: '#ef4444', gujcet: '#06b6d4',
     '90': '#1264F0', '75': '#f59e0b', pass: '#22c55e', board: '#64748b',
   }
-  const categorySplit = [...catCount.entries()]
+  const categorySplit = Array.from(catCount.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => ({
       name: name.toUpperCase(),
@@ -89,12 +89,12 @@ export async function GET(req: NextRequest) {
     const cur = refMap.get(r.referrer_id) || { earned: 0, refs: 0 }
     refMap.set(r.referrer_id, { earned: cur.earned + (r.commission_amount || 0), refs: cur.refs + 1 })
   }
-  const topIds = [...refMap.entries()].sort((a, b) => b[1].earned - a[1].earned).slice(0, 5).map(([id]) => id)
+  const topIds = Array.from(refMap.entries()).sort((a, b) => b[1].earned - a[1].earned).slice(0, 5).map(([id]) => id)
   const { data: topUsers } = topIds.length
     ? await db.from('users').select('id, name, mobile').in('id', topIds)
     : { data: [] }
   const uMap = new Map((topUsers || []).map(u => [u.id, u]))
-  const topReferrers = [...refMap.entries()]
+  const topReferrers = Array.from(refMap.entries())
     .sort((a, b) => b[1].earned - a[1].earned)
     .slice(0, 5)
     .map(([id, stats]) => {
