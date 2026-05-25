@@ -3,12 +3,13 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, Users, Wallet, Tag, BarChart2,
-  Bell, Settings, LogOut, Zap, Download, BookOpen, Star
+  Bell, Settings, LogOut, Zap, Download, BookOpen, Star, Gift
 } from 'lucide-react'
 
 const NAV = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
   { href: '/papers',       label: 'Papers',        icon: FileText },
+  { href: '/demo-papers',  label: 'Demo Papers',   icon: Gift },
   { href: '/categories',   label: 'Subjects',      icon: BookOpen },
   { href: '/users',        label: 'Users',         icon: Users },
   { href: '/withdrawals',  label: 'Withdrawals',   icon: Wallet },
