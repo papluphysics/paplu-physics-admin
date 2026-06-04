@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, Users, Wallet, Tag, BarChart2,
-  Bell, Settings, LogOut, Zap, Download, BookOpen, Star, Gift
+  Bell, Settings, LogOut, Zap, Download, BookOpen, Star, Gift, Megaphone
 } from 'lucide-react'
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { href: '/withdrawals',  label: 'Withdrawals',   icon: Wallet },
   { href: '/coupons',      label: 'Coupons',       icon: Tag },
   { href: '/reviews',      label: 'Reviews',       icon: Star },
+  { href: '/ads',          label: 'Ads',           icon: Megaphone },
   { href: '/analytics',    label: 'Analytics',     icon: BarChart2 },
   { href: '/downloads',    label: 'Downloads',     icon: Download },
   { href: '/notifications',label: 'Notifications', icon: Bell },
