@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const db = createAdminSupabase()
 
   const [{ data: users, error }, { data: purchases }, { data: referrals }] = await Promise.all([
-    db.from('users').select('id, name, mobile, email, wallet_balance, is_blocked, created_at, referral_code').order('created_at', { ascending: false }),
+    db.from('users').select('id, name, mobile, email, wallet_balance, is_blocked, created_at, referral_code, state, district, city').order('created_at', { ascending: false }),
     db.from('purchases').select('user_id'),
     db.from('referrals').select('referrer_id'),
   ])

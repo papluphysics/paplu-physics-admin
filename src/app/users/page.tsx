@@ -10,6 +10,9 @@ type User = {
   name: string | null
   mobile: string | null
   email: string | null
+  state: string | null
+  district: string | null
+  city: string | null
   wallet_balance: number
   is_blocked: boolean
   created_at: string
@@ -116,6 +119,11 @@ export default function AdminUsersPage() {
                         <td className="px-4 py-3">
                           <p className="text-xs text-gray-600">{u.email || '—'}</p>
                           <p className="text-xs text-gray-400">{u.mobile || '—'}</p>
+                          {(u.city || u.district || u.state) && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {[u.city, u.district, u.state].filter(Boolean).join(', ')}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center font-semibold">{u.purchase_count}</td>
                         <td className="px-4 py-3 font-semibold text-green-600">₹{(u.wallet_balance || 0).toFixed(2)}</td>
