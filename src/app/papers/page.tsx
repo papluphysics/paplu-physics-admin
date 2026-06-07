@@ -1,10 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { Upload, Plus, Pencil, Trash2, Eye, Search, X, FileText } from 'lucide-react'
+import { Upload, Plus, Pencil, Trash2, Search, X, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type Category = { id: string; label_en: string; class_level: number; subject: string; section: string }
+type Category = { id: string; label_en: string; class_level: string; subject: string; section: string }
 type Paper = {
   id: string
   title_en: string
@@ -16,12 +16,61 @@ type Paper = {
   is_popular: boolean
   is_active: boolean
   category_id: string
-  categories: { label_en: string; class_level: number; subject: string; section: string } | null
+  categories: { label_en: string; class_level: string; subject: string; section: string } | null
 }
 
 type ModalMode = 'add' | 'edit' | null
 
-const EMPTY_FORM = { title_en: '', title_gu: '', description_en: '', description_gu: '', category_id: '', price: '25', paper_count: '1', is_popular: false }
+const EMPTY_FORM = {
+  title_en: '', title_gu: '',
+  description_en: '', description_gu: '',
+  class_level: '', subject: '', section: '',
+  price: '25', paper_count: '1', is_popular: false,
+}
+
+function Combobox({ label, value, onChange, options, placeholder }: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const suggestions = options.filter(o =>
+    o.toLowerCase().includes(value.toLowerCase()) &&
+    o.toLowerCase() !== value.toLowerCase()
+  )
+  return (
+    <div className="relative">
+      <label className="label">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => { setOpen(false); onChange(value.trim()) }, 150)}
+        onKeyDown={e => e.key === 'Escape' && setOpen(false)}
+        placeholder={placeholder}
+        className="input"
+        autoComplete="off"
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto">
+          {suggestions.map(s => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); onChange(s); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors first:rounded-t-xl last:rounded-b-xl"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AdminPapersPage() {
   const [papers, setPapers] = useState<Paper[]>([])
@@ -45,11 +94,15 @@ export default function AdminPapersPage() {
     ])
     const [papersJson, catsJson] = await Promise.all([papersRes.json(), catsRes.json()])
     if (papersJson.data) setPapers(papersJson.data)
-    if (catsJson.data) setCats(catsJson.data)
+    if (catsJson.data) setCats(catsJson.data.map((c: any) => ({ ...c, class_level: String(c.class_level) })))
     setLoading(false)
   }, [token])
 
   useEffect(() => { load() }, [load])
+
+  const distinctClasses  = [...new Set(cats.map(c => c.class_level))].sort()
+  const distinctSubjects = [...new Set(cats.map(c => c.subject))].sort()
+  const distinctSections = [...new Set(cats.map(c => c.section))].sort()
 
   const filtered = papers.filter(p =>
     p.title_en.toLowerCase().includes(search.toLowerCase()) ||
@@ -57,7 +110,7 @@ export default function AdminPapersPage() {
   )
 
   const openAdd = () => {
-    setForm({ ...EMPTY_FORM, category_id: cats[0]?.id || '' })
+    setForm(EMPTY_FORM)
     setFile(null)
     setEditId(null)
     setModal('add')
@@ -69,7 +122,9 @@ export default function AdminPapersPage() {
       title_gu: p.title_gu || '',
       description_en: p.description_en || '',
       description_gu: p.description_gu || '',
-      category_id: p.category_id,
+      class_level: p.categories ? String(p.categories.class_level) : '',
+      subject: p.categories?.subject || '',
+      section: p.categories?.section || '',
       price: String(p.price),
       paper_count: String(p.paper_count),
       is_popular: p.is_popular,
@@ -80,17 +135,44 @@ export default function AdminPapersPage() {
   }
 
   const handleSave = async () => {
-    if (!form.title_en.trim() || !form.category_id) {
-      toast.error('Title and subject are required')
-      return
-    }
+    const cl = form.class_level.trim()
+    const sub = form.subject.trim()
+    const sec = form.section.trim()
+
+    if (!form.title_en.trim()) { toast.error('Title is required'); return }
+    if (!cl || !sub || !sec) { toast.error('Class, Subject, and Exam Type are required'); return }
+
     setSaving(true)
+
+    // Find existing category (case-insensitive match on all three fields)
+    let categoryId: string | undefined = cats.find(c =>
+      c.class_level.toLowerCase() === cl.toLowerCase() &&
+      c.subject.toLowerCase() === sub.toLowerCase() &&
+      c.section.toLowerCase() === sec.toLowerCase()
+    )?.id
+
+    // Create category on-the-fly if it doesn't exist
+    if (!categoryId) {
+      const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+      const label_en = `Class ${cl} ${capFirst(sub)} (${sec.toUpperCase()})`
+      const catRes = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ class_level: cl, subject: sub, section: sec, label_en, label_gu: label_en }),
+      })
+      const catJson = await catRes.json()
+      if (catJson.error) { toast.error(`Could not create category: ${catJson.error}`); setSaving(false); return }
+      categoryId = catJson.data.id
+      // Refresh cats list in background so suggestions stay current
+      setCats(prev => [...prev, { id: categoryId!, class_level: cl, subject: sub, section: sec, label_en }])
+    }
+
     const payload = {
       title_en: form.title_en,
       title_gu: form.title_gu,
       description_en: form.description_en,
       description_gu: form.description_gu,
-      category_id: form.category_id,
+      category_id: categoryId,
       price: Number(form.price),
       paper_count: Number(form.paper_count),
       is_popular: form.is_popular,
@@ -250,15 +332,32 @@ export default function AdminPapersPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <Combobox
+                  label="Class / Standard"
+                  value={form.class_level}
+                  onChange={v => setForm({ ...form, class_level: v })}
+                  options={distinctClasses}
+                  placeholder="e.g. 10, 12, 11"
+                />
+                <Combobox
+                  label="Subject"
+                  value={form.subject}
+                  onChange={v => setForm({ ...form, subject: v })}
+                  options={distinctSubjects}
+                  placeholder="e.g. physics, math"
+                />
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="label">Subject / Category</label>
-                  <select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value })} className="input">
-                    <option value="">— select —</option>
-                    {cats.map(c => (
-                      <option key={c.id} value={c.id}>{c.label_en} (Class {c.class_level})</option>
-                    ))}
-                  </select>
+                  <Combobox
+                    label="Exam Type / Section"
+                    value={form.section}
+                    onChange={v => setForm({ ...form, section: v })}
+                    options={distinctSections}
+                    placeholder="e.g. jee, neet, pass, 75"
+                  />
                 </div>
                 <div>
                   <label className="label">Price (₹)</label>
