@@ -10,7 +10,7 @@ const NAV = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
   { href: '/papers',       label: 'Papers',        icon: FileText },
   { href: '/demo-papers',  label: 'Demo Papers',   icon: Gift },
-  { href: '/categories',   label: 'Subjects',      icon: BookOpen },
+  { href: '/categories',   label: 'Categories',    icon: BookOpen },
   { href: '/users',        label: 'Users',         icon: Users },
   { href: '/withdrawals',  label: 'Withdrawals',   icon: Wallet },
   { href: '/coupons',      label: 'Coupons',       icon: Tag },

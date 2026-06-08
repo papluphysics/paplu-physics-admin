@@ -1,10 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { Upload, Plus, Pencil, Trash2, Search, X, FileText } from 'lucide-react'
+import { Upload, Plus, Pencil, Trash2, Search, X, FileText, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type Category = { id: string; label_en: string; class_level: string; subject: string; section: string }
+type ExamCat = { id: string; name: string; type: 'standard' | 'competitive_exam' }
 type Paper = {
   id: string
   title_en: string
@@ -17,8 +17,11 @@ type Paper = {
   is_active: boolean
   is_demo: boolean
   marking_scheme: string | null
-  category_id: string
+  category_id: string | null
+  subject: string | null
+  exam_category_id: string | null
   categories: { label_en: string; class_level: string; subject: string; section: string } | null
+  exam_categories: { id: string; name: string; type: string } | null
 }
 
 type ModalMode = 'add' | 'edit' | null
@@ -26,7 +29,8 @@ type ModalMode = 'add' | 'edit' | null
 const EMPTY_FORM = {
   title_en: '', title_gu: '',
   description_en: '', description_gu: '',
-  class_level: '', subject: '', section: '',
+  subject: '',
+  exam_category_id: '',
   price: '25', paper_count: '1', is_popular: false, is_demo: false,
   marking_scheme: '',
 }
@@ -77,38 +81,44 @@ function Combobox({ label, value, onChange, options, placeholder }: {
 
 export default function AdminPapersPage() {
   const [papers, setPapers] = useState<Paper[]>([])
-  const [cats, setCats] = useState<Category[]>([])
+  const [examCats, setExamCats] = useState<ExamCat[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState<ModalMode>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [categoryType, setCategoryType] = useState<'standard' | 'competitive_exam'>('standard')
+  const [addingCat, setAddingCat] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [creatingCat, setCreatingCat] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : ''
+  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : ''
 
   const load = useCallback(async () => {
     setLoading(true)
     const [papersRes, catsRes] = await Promise.all([
       fetch('/api/admin/papers', { headers: { Authorization: `Bearer ${token}` } }),
-      fetch('/api/admin/categories', { headers: { Authorization: `Bearer ${token}` } }),
+      fetch('/api/admin/exam-categories', { headers: { Authorization: `Bearer ${token}` } }),
     ])
     const [papersJson, catsJson] = await Promise.all([papersRes.json(), catsRes.json()])
     if (papersJson.data) setPapers(papersJson.data)
-    if (catsJson.data) setCats(catsJson.data.map((c: any) => ({ ...c, class_level: String(c.class_level) })))
+    if (catsJson.data) setExamCats(catsJson.data)
     setLoading(false)
   }, [token])
 
   useEffect(() => { load() }, [load])
 
-  const distinctClasses  = [...new Set(cats.map(c => c.class_level))].sort()
-  const distinctSubjects = [...new Set(cats.map(c => c.subject))].sort()
-  const distinctSections = [...new Set(cats.map(c => c.section))].sort()
+  const filteredCats = examCats.filter(c => c.type === categoryType)
+  const distinctSubjects = [...new Set(
+    papers.map(p => p.subject || p.categories?.subject || '').filter(Boolean)
+  )].sort()
 
   const filtered = papers.filter(p =>
     p.title_en.toLowerCase().includes(search.toLowerCase()) ||
+    (p.exam_categories?.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (p.categories?.label_en || '').toLowerCase().includes(search.toLowerCase())
   )
 
@@ -116,18 +126,23 @@ export default function AdminPapersPage() {
     setForm(EMPTY_FORM)
     setFile(null)
     setEditId(null)
+    setCategoryType('standard')
+    setAddingCat(false)
+    setNewCatName('')
     setModal('add')
   }
 
   const openEdit = (p: Paper) => {
+    const ec = p.exam_categories
+    if (ec) setCategoryType(ec.type as 'standard' | 'competitive_exam')
+    else setCategoryType('standard')
     setForm({
       title_en: p.title_en,
       title_gu: p.title_gu || '',
       description_en: p.description_en || '',
       description_gu: p.description_gu || '',
-      class_level: p.categories ? String(p.categories.class_level) : '',
-      subject: p.categories?.subject || '',
-      section: p.categories?.section || '',
+      subject: p.subject || p.categories?.subject || '',
+      exam_category_id: p.exam_category_id || '',
       price: String(p.price),
       paper_count: String(p.paper_count),
       is_popular: p.is_popular,
@@ -135,49 +150,44 @@ export default function AdminPapersPage() {
       marking_scheme: p.marking_scheme || '',
     })
     setFile(null)
+    setAddingCat(false)
+    setNewCatName('')
     setEditId(p.id)
     setModal('edit')
   }
 
-  const handleSave = async () => {
-    const cl = form.class_level.trim()
-    const sub = form.subject.trim()
-    const sec = form.section.trim()
+  const handleCreateCat = async () => {
+    const name = newCatName.trim()
+    if (!name) return
+    setCreatingCat(true)
+    const res = await fetch('/api/admin/exam-categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, type: categoryType }),
+    })
+    const json = await res.json()
+    setCreatingCat(false)
+    if (json.error) { toast.error(json.error); return }
+    const newCat: ExamCat = json.data
+    setExamCats(prev => [...prev, newCat])
+    setForm(f => ({ ...f, exam_category_id: newCat.id }))
+    setNewCatName('')
+    setAddingCat(false)
+    toast.success('Category created!')
+  }
 
+  const handleSave = async () => {
     if (!form.title_en.trim()) { toast.error('Title is required'); return }
-    if (!cl || !sub || !sec) { toast.error('Class, Subject, and Exam Type are required'); return }
 
     setSaving(true)
 
-    // Find existing category (case-insensitive match on all three fields)
-    let categoryId: string | undefined = cats.find(c =>
-      c.class_level.toLowerCase() === cl.toLowerCase() &&
-      c.subject.toLowerCase() === sub.toLowerCase() &&
-      c.section.toLowerCase() === sec.toLowerCase()
-    )?.id
-
-    // Create category on-the-fly if it doesn't exist
-    if (!categoryId) {
-      const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-      const label_en = `Class ${cl} ${capFirst(sub)} (${sec.toUpperCase()})`
-      const catRes = await fetch('/api/admin/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ class_level: cl, subject: sub, section: sec, label_en, label_gu: label_en }),
-      })
-      const catJson = await catRes.json()
-      if (catJson.error) { toast.error(`Could not create category: ${catJson.error}`); setSaving(false); return }
-      categoryId = catJson.data.id
-      // Refresh cats list in background so suggestions stay current
-      setCats(prev => [...prev, { id: categoryId!, class_level: cl, subject: sub, section: sec, label_en }])
-    }
-
-    const payload = {
+    const payload: Record<string, unknown> = {
       title_en: form.title_en,
       title_gu: form.title_gu,
       description_en: form.description_en,
       description_gu: form.description_gu,
-      category_id: categoryId,
+      exam_category_id: form.exam_category_id || null,
+      subject: form.subject.trim() || null,
       price: Number(form.price),
       paper_count: Number(form.paper_count),
       is_popular: form.is_popular,
@@ -268,55 +278,65 @@ export default function AdminPapersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Title', 'Subject', 'Price', 'Papers', 'Demo', 'Status', 'Actions'].map(h => (
+                      {['Title', 'Category / Subject', 'Price', 'Papers', 'Demo', 'Status', 'Actions'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filtered.map(p => (
-                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <FileText size={14} className="text-gray-400 shrink-0" />
-                            <div>
-                              <p className="font-medium text-gray-800">{p.title_en}</p>
-                              {p.is_popular && <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-semibold">Popular</span>}
+                    {filtered.map(p => {
+                      const catLabel = p.exam_categories?.name || p.categories?.label_en
+                      const subLabel = p.subject || p.categories?.subject
+                      return (
+                        <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <FileText size={14} className="text-gray-400 shrink-0" />
+                              <div>
+                                <p className="font-medium text-gray-800">{p.title_en}</p>
+                                {p.is_popular && <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-semibold">Popular</span>}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-xs font-semibold">
-                            {p.categories?.label_en || '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">₹{p.price}</td>
-                        <td className="px-4 py-3 text-gray-600">{p.paper_count}</td>
-                        <td className="px-4 py-3">
-                          {p.is_demo && (
-                            <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-semibold">Demo</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => toggleActive(p)}
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold border transition-colors ${
-                              p.is_active
-                                ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                            }`}
-                          >
-                            {p.is_active ? 'Active' : 'Hidden'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-1">
-                            <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-500" title="Edit"><Pencil size={14} /></button>
-                            <button onClick={() => handleDelete(p.id, p.title_en)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500" title="Delete"><Trash2 size={14} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-0.5">
+                              {catLabel && (
+                                <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-xs font-semibold w-fit">
+                                  {catLabel}
+                                </span>
+                              )}
+                              {subLabel && <span className="text-xs text-gray-400 capitalize">{subLabel}</span>}
+                              {!catLabel && !subLabel && <span className="text-xs text-gray-300">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-gray-900">₹{p.price}</td>
+                          <td className="px-4 py-3 text-gray-600">{p.paper_count}</td>
+                          <td className="px-4 py-3">
+                            {p.is_demo && (
+                              <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-semibold">Demo</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleActive(p)}
+                              className={`px-2 py-0.5 rounded-full text-xs font-semibold border transition-colors ${
+                                p.is_active
+                                  ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                  : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              {p.is_active ? 'Active' : 'Hidden'}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1">
+                              <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-amber-50 rounded-lg text-amber-500" title="Edit"><Pencil size={14} /></button>
+                              <button onClick={() => handleDelete(p.id, p.title_en)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500" title="Delete"><Trash2 size={14} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -333,6 +353,7 @@ export default function AdminPapersPage() {
               <button onClick={() => setModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
+              {/* Titles */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Title (English)</label>
@@ -344,40 +365,103 @@ export default function AdminPapersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Combobox
-                  label="Class / Standard"
-                  value={form.class_level}
-                  onChange={v => setForm({ ...form, class_level: v })}
-                  options={distinctClasses}
-                  placeholder="e.g. 10, 12, 11"
-                />
-                <Combobox
-                  label="Subject"
-                  value={form.subject}
-                  onChange={v => setForm({ ...form, subject: v })}
-                  options={distinctSubjects}
-                  placeholder="e.g. physics, math"
-                />
+              {/* TYPE radio */}
+              <div>
+                <label className="label">Type</label>
+                <div className="flex gap-3">
+                  {(['standard', 'competitive_exam'] as const).map(t => (
+                    <label key={t} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="category_type"
+                        value={t}
+                        checked={categoryType === t}
+                        onChange={() => {
+                          setCategoryType(t)
+                          setForm(f => ({ ...f, exam_category_id: '' }))
+                          setAddingCat(false)
+                          setNewCatName('')
+                        }}
+                        className="w-4 h-4 accent-brand-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        {t === 'standard' ? 'Standard (Class)' : 'Competitive Exam'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
+              {/* CATEGORY dropdown + inline add */}
+              <div>
+                <label className="label">Category</label>
+                {addingCat ? (
+                  <div className="flex gap-2">
+                    <input
+                      autoFocus
+                      value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreateCat() } if (e.key === 'Escape') { setAddingCat(false); setNewCatName('') } }}
+                      placeholder={categoryType === 'standard' ? 'e.g. Class 11' : 'e.g. MHT-CET'}
+                      className="input flex-1 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateCat}
+                      disabled={creatingCat || !newCatName.trim()}
+                      className="p-2 rounded-xl bg-green-500 text-white hover:bg-green-600 disabled:opacity-40"
+                    >
+                      <Check size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAddingCat(false); setNewCatName('') }}
+                      className="p-2 rounded-xl bg-gray-200 text-gray-600 hover:bg-gray-300"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={form.exam_category_id}
+                      onChange={e => setForm(f => ({ ...f, exam_category_id: e.target.value }))}
+                      className="input flex-1"
+                    >
+                      <option value="">— Select category —</option>
+                      {filteredCats.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setAddingCat(true)}
+                      className="shrink-0 px-3 py-2 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-xl border border-brand-200 transition-colors whitespace-nowrap flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Add new
+                    </button>
+                  </div>
+                )}
+                {filteredCats.length === 0 && !addingCat && (
+                  <p className="text-xs text-gray-400 mt-1">No {categoryType === 'standard' ? 'standards' : 'exams'} yet — click "+ Add new" to create one.</p>
+                )}
+              </div>
+
+              {/* Subject combobox */}
+              <Combobox
+                label="Subject"
+                value={form.subject}
+                onChange={v => setForm({ ...form, subject: v })}
+                options={distinctSubjects}
+                placeholder="e.g. Physics, Math, Chemistry"
+              />
+
+              {/* Price + count + toggles */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <Combobox
-                    label="Exam Type / Section"
-                    value={form.section}
-                    onChange={v => setForm({ ...form, section: v })}
-                    options={distinctSections}
-                    placeholder="e.g. jee, neet, pass, 75"
-                  />
-                </div>
                 <div>
                   <label className="label">Price (₹)</label>
                   <input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="input" />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">No. of Papers</label>
                   <input type="number" value={form.paper_count} onChange={e => setForm({ ...form, paper_count: e.target.value })} className="input" min="1" />
@@ -385,15 +469,16 @@ export default function AdminPapersPage() {
                 <div className="flex flex-col gap-2 justify-end pb-0.5">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={form.is_popular} onChange={e => setForm({ ...form, is_popular: e.target.checked })} className="w-4 h-4 accent-brand-500" />
-                    <span className="text-sm font-medium text-gray-700">Mark as Popular</span>
+                    <span className="text-xs font-medium text-gray-700">Popular</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={form.is_demo} onChange={e => setForm({ ...form, is_demo: e.target.checked })} className="w-4 h-4 accent-green-500" />
-                    <span className="text-sm font-medium text-green-700">Free Demo Paper</span>
+                    <span className="text-xs font-medium text-green-700">Free Demo</span>
                   </label>
                 </div>
               </div>
 
+              {/* Marking scheme */}
               <div>
                 <label className="label">Marking Scheme <span className="text-gray-400 font-normal">(optional)</span></label>
                 <textarea
@@ -404,6 +489,7 @@ export default function AdminPapersPage() {
                 />
               </div>
 
+              {/* Descriptions */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Description (EN)</label>
@@ -415,6 +501,7 @@ export default function AdminPapersPage() {
                 </div>
               </div>
 
+              {/* PDF drop zone */}
               <div>
                 <label className="label">PDF File</label>
                 <div
