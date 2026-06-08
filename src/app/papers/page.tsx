@@ -15,6 +15,8 @@ type Paper = {
   paper_count: number
   is_popular: boolean
   is_active: boolean
+  is_demo: boolean
+  marking_scheme: string | null
   category_id: string
   categories: { label_en: string; class_level: string; subject: string; section: string } | null
 }
@@ -25,7 +27,8 @@ const EMPTY_FORM = {
   title_en: '', title_gu: '',
   description_en: '', description_gu: '',
   class_level: '', subject: '', section: '',
-  price: '25', paper_count: '1', is_popular: false,
+  price: '25', paper_count: '1', is_popular: false, is_demo: false,
+  marking_scheme: '',
 }
 
 function Combobox({ label, value, onChange, options, placeholder }: {
@@ -128,6 +131,8 @@ export default function AdminPapersPage() {
       price: String(p.price),
       paper_count: String(p.paper_count),
       is_popular: p.is_popular,
+      is_demo: p.is_demo,
+      marking_scheme: p.marking_scheme || '',
     })
     setFile(null)
     setEditId(p.id)
@@ -176,6 +181,8 @@ export default function AdminPapersPage() {
       price: Number(form.price),
       paper_count: Number(form.paper_count),
       is_popular: form.is_popular,
+      is_demo: form.is_demo,
+      marking_scheme: form.marking_scheme.trim() || null,
     }
 
     let res: Response
@@ -261,7 +268,7 @@ export default function AdminPapersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      {['Title', 'Subject', 'Price', 'Papers', 'Status', 'Actions'].map(h => (
+                      {['Title', 'Subject', 'Price', 'Papers', 'Demo', 'Status', 'Actions'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -285,6 +292,11 @@ export default function AdminPapersPage() {
                         </td>
                         <td className="px-4 py-3 font-semibold text-gray-900">₹{p.price}</td>
                         <td className="px-4 py-3 text-gray-600">{p.paper_count}</td>
+                        <td className="px-4 py-3">
+                          {p.is_demo && (
+                            <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-semibold">Demo</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleActive(p)}
@@ -370,12 +382,26 @@ export default function AdminPapersPage() {
                   <label className="label">No. of Papers</label>
                   <input type="number" value={form.paper_count} onChange={e => setForm({ ...form, paper_count: e.target.value })} className="input" min="1" />
                 </div>
-                <div className="flex items-end pb-0.5">
+                <div className="flex flex-col gap-2 justify-end pb-0.5">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={form.is_popular} onChange={e => setForm({ ...form, is_popular: e.target.checked })} className="w-4 h-4 accent-brand-500" />
                     <span className="text-sm font-medium text-gray-700">Mark as Popular</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.is_demo} onChange={e => setForm({ ...form, is_demo: e.target.checked })} className="w-4 h-4 accent-green-500" />
+                    <span className="text-sm font-medium text-green-700">Free Demo Paper</span>
+                  </label>
                 </div>
+              </div>
+
+              <div>
+                <label className="label">Marking Scheme <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={form.marking_scheme}
+                  onChange={e => setForm({ ...form, marking_scheme: e.target.value })}
+                  className="input h-16 resize-none"
+                  placeholder="e.g. 30 MCQ × 1 mark, 5 long-answer × 5 marks, total 55 marks"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

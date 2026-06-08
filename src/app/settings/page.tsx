@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import AdminSidebar from '@/components/AdminSidebar'
-import { Save, Eye, EyeOff } from 'lucide-react'
+import { Save, Eye, EyeOff, Video, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Integration = { name: string; connected: boolean; note: string }
@@ -10,14 +10,35 @@ export default function AdminSettingsPage() {
   const [show, setShow] = useState(false)
   const [adminPass, setAdminPass] = useState('')
   const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [videoUrl, setVideoUrl] = useState('')
+  const [videoSaved, setVideoSaved] = useState(false)
+  const [videoSaving, setVideoSaving] = useState(false)
   const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : ''
 
   useEffect(() => {
     fetch('/api/admin/settings', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => { if (d.integrations) setIntegrations(d.integrations) })
+      .then(d => {
+        if (d.integrations) setIntegrations(d.integrations)
+        if (d.settings?.demo_video_url) setVideoUrl(d.settings.demo_video_url)
+      })
       .catch(() => {})
   }, [token])
+
+  const saveVideoUrl = async () => {
+    setVideoSaving(true)
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ key: 'demo_video_url', value: videoUrl.trim() || null }),
+    })
+    const json = await res.json()
+    setVideoSaving(false)
+    if (json.error) { toast.error(json.error); return }
+    setVideoSaved(true)
+    toast.success('Video URL saved')
+    setTimeout(() => setVideoSaved(false), 2000)
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -28,6 +49,39 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="p-6 max-w-2xl space-y-6">
+          {/* Demo Page Video Link */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Video size={16} className="text-brand-500" />
+              <h2 className="font-semibold text-gray-900">Demo Page — Video Link</h2>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              Paste any video URL (YouTube, Instagram Reels, Loom, etc.). It appears in the "Earn with Paplu Physics" section on /demo and /papers. Leave blank to hide the video block.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+                className="input flex-1"
+                placeholder="https://youtube.com/watch?v=... or https://instagram.com/reel/..."
+              />
+              <button
+                onClick={saveVideoUrl}
+                disabled={videoSaving}
+                className="btn-primary flex items-center gap-2 shrink-0 disabled:opacity-60"
+              >
+                {videoSaved ? <Check size={14} /> : <Save size={14} />}
+                {videoSaved ? 'Saved' : videoSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            {videoUrl && (
+              <p className="text-xs text-gray-400 mt-2">
+                Current: <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="text-brand-500 underline">{videoUrl}</a>
+              </p>
+            )}
+          </div>
+
           {/* Admin Password */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="font-semibold text-gray-900 mb-5">Change Admin Password</h2>

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyAdminToken } from '@/lib/supabase'
+import { createAdminSupabase, verifyAdminToken } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const db = createAdminSupabase()
+  const { data: settingsRows } = await db.from('settings').select('key, value')
+  const settings: Record<string, string | null> = {}
+  for (const row of settingsRows || []) settings[row.key] = row.value
 
   const integrations = [
     {
@@ -27,5 +32,21 @@ export async function GET(req: NextRequest) {
     },
   ]
 
-  return NextResponse.json({ integrations })
+  return NextResponse.json({ integrations, settings })
+}
+
+export async function PUT(req: NextRequest) {
+  if (!verifyAdminToken(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json()
+  const { key, value } = body
+  if (!key) return NextResponse.json({ error: 'key is required' }, { status: 400 })
+
+  const db = createAdminSupabase()
+  const { error } = await db
+    .from('settings')
+    .upsert({ key, value: value ?? null }, { onConflict: 'key' })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
